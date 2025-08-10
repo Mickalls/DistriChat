@@ -1,6 +1,6 @@
 package com.distri.chat.interfaces.web;
 
-import com.distri.chat.infrastructure.websocket.WebSocketHandler;
+import com.distri.chat.infrastructure.websocket.WebSocketConnectionManager;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,12 +26,15 @@ public class HealthController {
 
     @Autowired
     private DataSource dataSource;
-    
+
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
-    
+
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
+
+    @Autowired 
+    private WebSocketConnectionManager connectionManager;
 
     @Operation(summary = "检查系统健康状态", description = "检查数据库、Redis、Kafka、WebSocket等组件的连接状态")
     @GetMapping("/check")
@@ -39,19 +42,19 @@ public class HealthController {
         Map<String, Object> result = new HashMap<>();
         result.put("timestamp", LocalDateTime.now());
         result.put("status", "UP");
-        
+
         // 检查数据库连接
         result.put("database", checkDatabase());
-        
+
         // 检查Redis连接
         result.put("redis", checkRedis());
-        
+
         // 检查Kafka连接
         result.put("kafka", checkKafka());
-        
+
         // 检查WebSocket状态
         result.put("websocket", checkWebSocket());
-        
+
         return result;
     }
 
@@ -74,7 +77,7 @@ public class HealthController {
             redisTemplate.opsForValue().set(testKey, "test");
             String value = (String) redisTemplate.opsForValue().get(testKey);
             redisTemplate.delete(testKey);
-            
+
             redisStatus.put("status", "test".equals(value) ? "UP" : "DOWN");
             if ("test".equals(value)) {
                 redisStatus.put("message", "Redis连接正常");
@@ -103,8 +106,17 @@ public class HealthController {
 
     private Map<String, Object> checkWebSocket() {
         Map<String, Object> wsStatus = new HashMap<>();
-        wsStatus.put("status", "UP");
-        wsStatus.put("activeConnections", WebSocketHandler.getActiveConnectionCount());
+        try {
+            var stats = connectionManager.getStats();
+            wsStatus.put("status", "UP");
+            wsStatus.put("activeConnections", stats.getActiveConnections());
+            wsStatus.put("totalConnections", stats.getTotalConnections());
+            wsStatus.put("heartbeatSent", stats.getHeartbeatSentCount());
+            wsStatus.put("heartbeatTimeout", stats.getHeartbeatTimeoutCount());
+        } catch (Exception e) {
+            wsStatus.put("status", "DOWN");
+            wsStatus.put("error", e.getMessage());
+        }
         return wsStatus;
     }
 
@@ -114,10 +126,10 @@ public class HealthController {
         Map<String, Object> result = new HashMap<>();
         try {
             String message = "测试广播消息 - " + LocalDateTime.now();
-            WebSocketHandler.broadcast(message);
+            connectionManager.broadcast(message);
             result.put("status", "success");
             result.put("message", "广播消息已发送");
-            result.put("activeConnections", WebSocketHandler.getActiveConnectionCount());
+            result.put("activeConnections", connectionManager.getStats().getActiveConnections());
         } catch (Exception e) {
             result.put("status", "error");
             result.put("error", e.getMessage());

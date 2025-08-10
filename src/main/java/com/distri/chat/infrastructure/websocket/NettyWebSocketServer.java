@@ -32,10 +32,12 @@ public class NettyWebSocketServer {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private ChannelFuture channelFuture;
-    private final WebSocketHandler webSocketHandler;
+    private final WebSocketConnectionManager connectionManager;
+    private final WebSocketMessageProcessor messageProcessor;
     
-    public NettyWebSocketServer(WebSocketHandler webSocketHandler) {
-        this.webSocketHandler = webSocketHandler;
+    public NettyWebSocketServer(WebSocketConnectionManager connectionManager, WebSocketMessageProcessor messageProcessor) {
+        this.connectionManager = connectionManager;
+        this.messageProcessor = messageProcessor;
     }
 
     /**
@@ -62,12 +64,12 @@ public class NettyWebSocketServer {
                                     .addLast(new HttpObjectAggregator(65536))
                                     // 支持大文件传输
                                     .addLast(new ChunkedWriteHandler())
-                                    // 心跳检测 - 读超时60秒，写超时30秒，读写超时90秒
-                                    .addLast(new IdleStateHandler(60, 30, 90, TimeUnit.SECONDS))
+                                    // 心跳检测 - 读超时75秒，写超时不检测，读写超时不检测
+                                    .addLast(new IdleStateHandler(75, 0, 0, TimeUnit.SECONDS))
                                     // WebSocket协议处理器
                                     .addLast(new WebSocketServerProtocolHandler("/ws"))
-                                    // 自定义WebSocket处理器
-                                    .addLast(webSocketHandler);
+                                    // 自定义WebSocket处理器 - 每次创建新实例
+                                    .addLast(new WebSocketHandler(connectionManager, messageProcessor));
                         }
                     });
 

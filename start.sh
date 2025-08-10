@@ -1,0 +1,1 @@
+./scripts/prestart.sh && mvn spring-boot:run
