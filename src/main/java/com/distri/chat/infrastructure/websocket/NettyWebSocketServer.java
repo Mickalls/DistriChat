@@ -1,5 +1,6 @@
 package com.distri.chat.infrastructure.websocket;
 
+import com.distri.chat.shared.utils.JwtUtil;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -28,16 +29,19 @@ import java.util.concurrent.TimeUnit;
 public class NettyWebSocketServer {
 
     private static final Logger logger = LoggerFactory.getLogger(NettyWebSocketServer.class);
-    
+    private final WebSocketConnectionManager connectionManager;
+    private final WebSocketMessageProcessor messageProcessor;
+    private final JwtUtil jwtUtil;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private ChannelFuture channelFuture;
-    private final WebSocketConnectionManager connectionManager;
-    private final WebSocketMessageProcessor messageProcessor;
-    
-    public NettyWebSocketServer(WebSocketConnectionManager connectionManager, WebSocketMessageProcessor messageProcessor) {
+
+    public NettyWebSocketServer(WebSocketConnectionManager connectionManager,
+                                WebSocketMessageProcessor messageProcessor,
+                                JwtUtil jwtUtil) {
         this.connectionManager = connectionManager;
         this.messageProcessor = messageProcessor;
+        this.jwtUtil = jwtUtil;
     }
 
     /**
@@ -46,7 +50,7 @@ public class NettyWebSocketServer {
     public void start(int port) {
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
-        
+
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workerGroup)
@@ -62,6 +66,8 @@ public class NettyWebSocketServer {
                                     .addLast(new HttpServerCodec())
                                     // HTTP消息聚合器
                                     .addLast(new HttpObjectAggregator(65536))
+                                    // JWT认证处理器（在WebSocket升级前进行认证）- 每次创建新实例 (非 Sharad Handler)
+                                    .addLast(new WebSocketAuthHandler(jwtUtil))
                                     // 支持大文件传输
                                     .addLast(new ChunkedWriteHandler())
                                     // 心跳检测 - 读超时75秒，写超时不检测，读写超时不检测
@@ -75,7 +81,7 @@ public class NettyWebSocketServer {
 
             channelFuture = bootstrap.bind(port).sync();
             logger.info("Netty WebSocket服务器启动成功，端口：{}", port);
-            
+
         } catch (Exception e) {
             logger.error("Netty WebSocket服务器启动失败", e);
             shutdown();

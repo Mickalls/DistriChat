@@ -8,7 +8,7 @@ set -euo pipefail
 
 ports=("$@")
 if [[ ${#ports[@]} -eq 0 ]]; then
-  ports=(9000 28080)
+  ports=(9000 28080 9001 28081 9092 28082)
 fi
 
 SUDO=""

@@ -1,10 +1,14 @@
 package com.distri.chat.infrastructure.websocket;
 
+import com.distri.chat.shared.dto.WebSocketMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PreDestroy;
@@ -22,6 +26,9 @@ public class WebSocketConnectionManager {
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketConnectionManager.class);
 
+    private final WebSocketConnectionRegistry connectionRegistry;
+    private final ObjectMapper objectMapper;
+
     // 连接存储
     private final ConcurrentMap<String, ChannelHandlerContext> connections = new ConcurrentHashMap<>();
     
@@ -38,6 +45,11 @@ public class WebSocketConnectionManager {
     private final AtomicLong activeConnections = new AtomicLong(0);
     private final AtomicLong heartbeatSentCount = new AtomicLong(0);
     private final AtomicLong heartbeatTimeoutCount = new AtomicLong(0);
+    
+    public WebSocketConnectionManager(WebSocketConnectionRegistry connectionRegistry, ObjectMapper objectMapper) {
+        this.connectionRegistry = connectionRegistry;
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * 添加连接
@@ -46,6 +58,9 @@ public class WebSocketConnectionManager {
         connections.put(channelId, ctx);
         totalConnections.incrementAndGet();
         activeConnections.incrementAndGet();
+        
+        // 从Channel属性中获取用户信息并注册到Redis
+        registerUserConnectionToRedis(channelId, ctx);
         
         // 启动心跳检测
         startHeartbeat(channelId, ctx);
@@ -57,8 +72,12 @@ public class WebSocketConnectionManager {
      * 移除连接
      */
     public void removeConnection(String channelId) {
-        if (connections.remove(channelId) != null) {
+        ChannelHandlerContext ctx = connections.remove(channelId);
+        if (ctx != null) {
             activeConnections.decrementAndGet();
+            
+            // 从Redis中注销连接信息
+            unregisterUserConnectionFromRedis(channelId, ctx);
             
             // 清理心跳相关数据
             clearHeartbeatData(channelId);
@@ -199,6 +218,19 @@ public class WebSocketConnectionManager {
     }
 
     /**
+     * 向指定连接发送WebSocket消息
+     */
+    public boolean sendMessage(String channelId, WebSocketMessage message) {
+        try {
+            String messageJson = objectMapper.writeValueAsString(message);
+            return sendMessage(channelId, messageJson);
+        } catch (Exception e) {
+            logger.error("序列化WebSocket消息失败: channelId={}, message={}", channelId, message, e);
+            return false;
+        }
+    }
+
+    /**
      * 广播消息给所有连接
      */
     public void broadcast(String message) {
@@ -207,6 +239,18 @@ public class WebSocketConnectionManager {
                 ctx.writeAndFlush(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame(message));
             }
         });
+    }
+
+    /**
+     * 广播WebSocket消息给所有连接
+     */
+    public void broadcast(WebSocketMessage message) {
+        try {
+            String messageJson = objectMapper.writeValueAsString(message);
+            broadcast(messageJson);
+        } catch (Exception e) {
+            logger.error("序列化广播WebSocket消息失败: message={}", message, e);
+        }
     }
 
     /**
@@ -306,6 +350,44 @@ public class WebSocketConnectionManager {
     /**
      * 优雅关闭定时器
      */
+    /**
+     * 将用户连接信息注册到Redis
+     */
+    private void registerUserConnectionToRedis(String channelId, ChannelHandlerContext ctx) {
+        try {
+            // 从Channel属性中获取用户信息
+            Long userId = WebSocketAuthHandler.getUserId(ctx);
+            String deviceId = WebSocketAuthHandler.getDeviceId(ctx);
+            
+            if (userId != null && deviceId != null) {
+                connectionRegistry.registerUserConnection(userId, deviceId);
+                logger.debug("用户连接已注册到Redis: userId={}, deviceId={}, channelId={}", 
+                        userId, deviceId, channelId);
+            }
+        } catch (Exception e) {
+            logger.error("注册用户连接到Redis失败: channelId={}", channelId, e);
+        }
+    }
+    
+    /**
+     * 从Redis中注销用户连接信息
+     */
+    private void unregisterUserConnectionFromRedis(String channelId, ChannelHandlerContext ctx) {
+        try {
+            // 从Channel属性中获取用户信息
+            Long userId = WebSocketAuthHandler.getUserId(ctx);
+            String deviceId = WebSocketAuthHandler.getDeviceId(ctx);
+            
+            if (userId != null && deviceId != null) {
+                connectionRegistry.unregisterUserConnection(userId, deviceId);
+                logger.debug("用户连接已从Redis中删除: userId={}, deviceId={}, channelId={}", 
+                        userId, deviceId, channelId);
+            }
+        } catch (Exception e) {
+            logger.error("从Redis删除用户连接失败: channelId={}", channelId, e);
+        }
+    }
+
     @PreDestroy
     public void shutdown() {
         logger.info("正在关闭WebSocket连接管理器...");
@@ -315,6 +397,8 @@ public class WebSocketConnectionManager {
         heartbeatTimeouts.clear();
         pongTimeouts.clear();
         waitingPong.clear();
+        
+        // 注销操作由WebSocketConnectionRegistry的@PreDestroy处理
         
         // 关闭时间轮定时器
         timer.stop();
