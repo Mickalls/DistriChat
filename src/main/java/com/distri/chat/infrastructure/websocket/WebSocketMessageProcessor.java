@@ -73,15 +73,6 @@ public class WebSocketMessageProcessor {
         eventHandlers.put(WebSocketEventType.SYSTEM_HEARTBEAT_PING.getValue(), this::handleHeartbeatPing);
         eventHandlers.put(WebSocketEventType.SYSTEM_HEARTBEAT_PONG.getValue(), this::handleHeartbeatPong);
         
-        // ACK事件
-        eventHandlers.put(WebSocketEventType.SYSTEM_ACK.getValue(), this::handleAck);
-        
-        // 用户事件
-        eventHandlers.put(WebSocketEventType.USER_STATUS_CHANGE.getValue(), this::handleUserStatusChange);
-        
-        // 聊天事件
-        eventHandlers.put(WebSocketEventType.CHAT_MESSAGE_SEND.getValue(), this::handleChatMessage);
-        
         // TODO: 后续添加更多事件处理器
     }
     
@@ -93,8 +84,9 @@ public class WebSocketMessageProcessor {
     private void handleHeartbeatPing(String channelId, WebSocketMessage message) {
         logger.debug("收到心跳ping，连接：{}", channelId);
         
-        // 回复pong
+        // 回复pong，在eventData中标明消息类型
         WebSocketMessage pongMessage = WebSocketMessage.heartbeat(WebSocketEventType.SYSTEM_HEARTBEAT_PONG);
+        pongMessage.setEventData(Map.of("message", "pong"));
         sendMessage(channelId, pongMessage);
     }
     
@@ -104,46 +96,6 @@ public class WebSocketMessageProcessor {
     private void handleHeartbeatPong(String channelId, WebSocketMessage message) {
         logger.debug("收到心跳pong，连接：{}", channelId);
         connectionManager.handlePongReceived(channelId);
-    }
-    
-    /**
-     * 处理ACK确认
-     */
-    private void handleAck(String channelId, WebSocketMessage message) {
-        logger.debug("收到ACK确认，连接：{}，消息ID：{}", channelId, message.getMessageId());
-        // TODO: 实现ACK处理逻辑（如标记消息已送达）
-    }
-    
-    /**
-     * 处理用户状态变更
-     */
-    private void handleUserStatusChange(String channelId, WebSocketMessage message) {
-        logger.info("收到用户状态变更，连接：{}，数据：{}", channelId, message.getEventData());
-        
-        // 发送ACK（如果需要）
-        if (Boolean.TRUE.equals(message.getAckRequired())) {
-            sendAck(channelId, message.getMessageId(), true, null);
-        }
-        
-        // TODO: 实现状态变更业务逻辑
-        // 1. 更新用户在线状态
-        // 2. 通知好友
-        // 3. 记录状态变更日志
-    }
-    
-    /**
-     * 处理聊天消息
-     */
-    private void handleChatMessage(String channelId, WebSocketMessage message) {
-        logger.info("收到聊天消息，连接：{}，数据：{}", channelId, message.getEventData());
-        
-        // 发送ACK（聊天消息需要确认）
-        sendAck(channelId, message.getMessageId(), true, null);
-        
-        // TODO: 实现聊天消息业务逻辑
-        // 1. 保存消息到数据库
-        // 2. 推送给接收方
-        // 3. 发送消息已送达通知
     }
     
     /**

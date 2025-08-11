@@ -1,6 +1,7 @@
 package com.distri.chat.infrastructure.websocket;
 
 import com.distri.chat.shared.dto.WebSocketMessage;
+import com.distri.chat.shared.enums.WebSocketEventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.HashedWheelTimer;
@@ -12,6 +13,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PreDestroy;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -288,7 +290,7 @@ public class WebSocketConnectionManager {
             // 第一次发送ping
             logger.debug("75秒无消息，发送ping检测连接：{}", channelId);
             waitingPong.put(channelId, 1);
-            ctx.writeAndFlush(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame("ping"));
+            sendPingMessage(channelId);
             incrementHeartbeatSent();
             
             // 15秒后检查pong响应
@@ -298,7 +300,7 @@ public class WebSocketConnectionManager {
             // 第二次发送ping
             logger.warn("第{}次ping检测，连接：{}", retryCount + 1, channelId);
             waitingPong.put(channelId, retryCount + 1);
-            ctx.writeAndFlush(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame("ping"));
+            sendPingMessage(channelId);
             incrementHeartbeatSent();
             
             // 15秒后再次检查
@@ -322,6 +324,22 @@ public class WebSocketConnectionManager {
         clearWaitingPong(channelId);
         // 重置心跳检测
         resetHeartbeat(channelId);
+    }
+
+    /**
+     * 发送ping消息（使用标准JSON格式）
+     */
+    private void sendPingMessage(String channelId) {
+        try {
+            WebSocketMessage pingMessage = WebSocketMessage.heartbeat(WebSocketEventType.SYSTEM_HEARTBEAT_PING);
+            // 添加eventData部分，标明消息类型
+            pingMessage.setEventData(Map.of("message", "ping"));
+            String messageJson = objectMapper.writeValueAsString(pingMessage);
+            sendMessage(channelId, messageJson);
+            logger.debug("发送ping消息：{}", messageJson);
+        } catch (Exception e) {
+            logger.error("发送ping消息失败，连接：{}", channelId, e);
+        }
     }
 
     /**
