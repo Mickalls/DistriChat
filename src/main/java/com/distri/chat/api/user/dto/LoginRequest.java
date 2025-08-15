@@ -1,4 +1,4 @@
-package com.distri.chat.domain.user.dto;
+package com.distri.chat.api.user.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

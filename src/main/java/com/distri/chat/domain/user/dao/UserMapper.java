@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.persistence.mapper;
+package com.distri.chat.domain.user.dao;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.distri.chat.domain.user.entity.User;
