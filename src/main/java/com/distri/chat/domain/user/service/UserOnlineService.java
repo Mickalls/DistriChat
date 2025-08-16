@@ -1,6 +1,6 @@
 package com.distri.chat.domain.user.service;
 
-import com.distri.chat.infrastructure.websocket.WebSocketConnectionRegistry;
+import com.distri.chat.infra.websocket.WebSocketConnectionRegistry;
 import com.distri.chat.shared.enums.ChatType;
 import org.springframework.stereotype.Service;
 

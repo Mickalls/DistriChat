@@ -1,6 +1,6 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
-import com.distri.chat.infrastructure.config.WebSocketConfig;
+import com.distri.chat.infra.config.WebSocketConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;

@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.config;
+package com.distri.chat.infra.config;
 
 import com.distri.chat.shared.dto.Result;
 import com.distri.chat.shared.exception.BusinessException;

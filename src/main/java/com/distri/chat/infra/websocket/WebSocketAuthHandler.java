@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
 import com.distri.chat.shared.utils.JwtUtil;
 import io.netty.channel.ChannelHandlerContext;
@@ -26,9 +26,11 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
     public static final AttributeKey<String> DEVICE_ID_KEY = AttributeKey.valueOf("deviceId");
     private static final Logger logger = LoggerFactory.getLogger(WebSocketAuthHandler.class);
     private final JwtUtil jwtUtil;
+    private final WebSocketConnectionManager connectionManager;
 
-    public WebSocketAuthHandler(JwtUtil jwtUtil) {
+    public WebSocketAuthHandler(JwtUtil jwtUtil, WebSocketConnectionManager connectionManager) {
         this.jwtUtil = jwtUtil;
+        this.connectionManager = connectionManager;
     }
 
     /**
@@ -47,27 +49,21 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        logger.info("[序位3] WebSocketAuthHandler.channelRead - 开始处理HTTP请求: {}", ctx.channel().id().asShortText());
-
         if (msg instanceof FullHttpRequest) {
             FullHttpRequest request = (FullHttpRequest) msg;
-            logger.info("[序位3] WebSocketAuthHandler.channelRead - 收到FullHttpRequest: {}", request.uri());
 
             // 只处理WebSocket升级请求
             if (isWebSocketUpgrade(request)) {
-                logger.info("[序位3] WebSocketAuthHandler.channelRead - 检测到WebSocket升级请求");
                 if (!authenticateWebSocket(ctx, request)) {
                     // 认证失败，关闭连接
                     logger.error("[序位3] WebSocketAuthHandler.channelRead - 认证失败，关闭连接");
                     ctx.close();
                     return;
                 }
-                logger.info("[序位3] WebSocketAuthHandler.channelRead - 认证成功，继续处理");
             }
         }
 
         // 继续传递消息
-        logger.info("[序位3] WebSocketAuthHandler.channelRead - 传递消息到下一个handler");
         super.channelRead(ctx, msg);
     }
 
@@ -87,34 +83,29 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
      * @return true-认证成功, false-认证失败
      */
     private boolean authenticateWebSocket(ChannelHandlerContext ctx, FullHttpRequest request) {
-        logger.info("[序位3] WebSocketAuthHandler.authenticateWebSocket - 开始认证");
         try {
             String token = extractToken(request);
-            logger.info("[序位3] WebSocketAuthHandler.authenticateWebSocket - 提取token: {}", token != null ? "有token" : "无token");
+            logger.info("WebSocketAuthHandler.authenticateWebSocket - 提取token: {}", token != null ? "有token" : "无token");
 
             if (!StringUtils.hasText(token)) {
-                logger.warn("[序位3] WebSocketAuthHandler.authenticateWebSocket - WebSocket连接缺少token: {}", ctx.channel().remoteAddress());
+                logger.error("WebSocketAuthHandler.authenticateWebSocket - WebSocket连接缺少token: {}", ctx.channel().remoteAddress());
                 return false;
             }
 
             // 解析JWT token
-            logger.info("[序位3] WebSocketAuthHandler.authenticateWebSocket - 开始解析JWT token");
             JwtUtil.JwtClaims claims = jwtUtil.parseToken(token);
-            logger.info("[序位3] WebSocketAuthHandler.authenticateWebSocket - JWT token解析成功");
 
             // 将用户信息存储到Channel属性中
             ctx.channel().attr(USER_ID_KEY).set(claims.getUserId());
             ctx.channel().attr(DEVICE_ID_KEY).set(claims.getDeviceId());
-            logger.info("[序位3] WebSocketAuthHandler.authenticateWebSocket - 用户信息已存储到Channel属性");
 
-            logger.info("[序位3] WebSocketAuthHandler.authenticateWebSocket - WebSocket认证成功: userId={}, deviceId={}, remote={}",
-                    claims.getUserId(), claims.getDeviceId(), ctx.channel().remoteAddress());
+            String channelId = String.format("user_%d_device_%s", claims.getUserId(), claims.getDeviceId());
+            connectionManager.addConnection(channelId, ctx);
 
             return true;
 
         } catch (Exception e) {
-            logger.warn("[序位3] WebSocketAuthHandler.authenticateWebSocket - WebSocket认证失败: remote={}, error={}",
-                    ctx.channel().remoteAddress(), e.getMessage());
+            logger.error("WebSocketAuthHandler.authenticateWebSocket - WebSocket认证失败: {}", ctx.channel().remoteAddress(), e);
             return false;
         }
     }

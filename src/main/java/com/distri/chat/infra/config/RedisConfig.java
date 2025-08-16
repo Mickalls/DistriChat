@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.config;
+package com.distri.chat.infra.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

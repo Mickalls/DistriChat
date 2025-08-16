@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.config;
+package com.distri.chat.infra.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;

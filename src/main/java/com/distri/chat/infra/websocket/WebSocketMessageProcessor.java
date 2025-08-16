@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
 import com.distri.chat.shared.dto.WebSocketMessage;
 import com.distri.chat.shared.enums.WebSocketEventType;
@@ -56,7 +56,7 @@ public class WebSocketMessageProcessor {
                 handler.accept(channelId, message);
             } else {
                 logger.warn("未知事件类型：{}，连接：{}", eventType, channelId);
-                sendError(channelId, message.getMessageId(), "未知事件类型: " + eventType);
+                sendError(channelId, message.getEventId(), "未知事件类型: " + eventType);
             }
             
         } catch (Exception e) {

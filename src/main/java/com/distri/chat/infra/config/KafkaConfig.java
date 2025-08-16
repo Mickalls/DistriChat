@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.config;
+package com.distri.chat.infra.config;
 
 import org.apache.kafka.clients.admin.NewTopic;
 import org.slf4j.Logger;

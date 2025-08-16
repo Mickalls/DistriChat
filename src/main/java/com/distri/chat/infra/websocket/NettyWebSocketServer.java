@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
 import com.distri.chat.shared.utils.JwtUtil;
 import io.netty.bootstrap.ServerBootstrap;
@@ -67,7 +67,7 @@ public class NettyWebSocketServer {
                                     // HTTP消息聚合器
                                     .addLast(new HttpObjectAggregator(65536))
                                     // JWT认证处理器（在WebSocket升级前进行认证）- 每次创建新实例 (非 Sharad Handler)
-                                    .addLast(new WebSocketAuthHandler(jwtUtil))
+                                    .addLast(new WebSocketAuthHandler(jwtUtil, connectionManager))
                                     // 支持大文件传输
                                     .addLast(new ChunkedWriteHandler())
                                     // 心跳检测 - 读超时75秒，写超时不检测，读写超时不检测

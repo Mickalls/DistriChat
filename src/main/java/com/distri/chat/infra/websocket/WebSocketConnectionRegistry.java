@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;

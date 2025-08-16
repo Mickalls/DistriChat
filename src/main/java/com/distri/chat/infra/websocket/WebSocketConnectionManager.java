@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
 import com.distri.chat.shared.dto.WebSocketMessage;
 import com.distri.chat.shared.enums.WebSocketEventType;
@@ -8,8 +8,6 @@ import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PreDestroy;

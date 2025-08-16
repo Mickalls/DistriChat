@@ -7,6 +7,7 @@ import com.distri.chat.domain.message.service.PrivateChatService;
 import com.distri.chat.domain.user.service.UserOnlineService;
 import com.distri.chat.shared.dto.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,9 +28,11 @@ public class SendMsgController {
         this.userOnlineService = userOnlineService;
     }
 
+    @PostMapping("/send")
     public Result<SendMsgResponse> sendMsg(@RequestBody SendMsgRequest sendMsgRequest) {
         // todo: 参数校验
         // todo: 根据关系领域, 判断是否为合法关系(好友/群成员/...)
+        // todo: 根据关系领域返回会话Id
 
         // LoadReceiverOnlineStatus
         Map<String, Boolean> receiverOnlineStatus = userOnlineService.getReceiverOnlineStatus(sendMsgRequest.getToUserId(), sendMsgRequest.getChatType());
@@ -38,11 +41,11 @@ public class SendMsgController {
         switch (sendMsgRequest.getChatType()) {
             // 私聊
             case PRIVATE:
-                privateChatService.sendMsg(sendMsgRequest);
+                privateChatService.sendMsg(sendMsgRequest, receiverOnlineStatus);
                 break;
             // 群聊
             case GROUP:
-                groupChatService.sendMsg(sendMsgRequest);
+                groupChatService.sendMsg(sendMsgRequest, receiverOnlineStatus);
                 break;
         }
 

@@ -1,6 +1,6 @@
-package com.distri.chat.infrastructure.config;
+package com.distri.chat.infra.config;
 
-import com.distri.chat.infrastructure.interceptor.AuthInterceptor;
+import com.distri.chat.infra.interceptor.AuthInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;

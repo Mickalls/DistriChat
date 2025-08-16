@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.websocket;
+package com.distri.chat.infra.websocket;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -15,10 +15,10 @@ import org.slf4j.LoggerFactory;
 public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketHandler.class);
-    
+
     private final WebSocketConnectionManager connectionManager;
     private final WebSocketMessageProcessor messageProcessor;
-    
+
     public WebSocketHandler(WebSocketConnectionManager connectionManager, WebSocketMessageProcessor messageProcessor) {
         this.connectionManager = connectionManager;
         this.messageProcessor = messageProcessor;
@@ -26,11 +26,11 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
 
     /**
      * 处理WebSocket连接激活
-     * 
+     * <p>
      * 激活时机：
      * - 客户端成功建立WebSocket连接时
      * - 完成HTTP升级握手后
-     * 
+     * <p>
      * 处理内容：
      * - 将连接注册到连接管理器
      * - 启动心跳检测定时器（75秒）
@@ -38,20 +38,20 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
      */
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        String channelId = ctx.channel().id().asShortText();
-        connectionManager.addConnection(channelId, ctx);
+//        String channelId = generateChannelId(ctx);
+//        connectionManager.addConnection(channelId, ctx);
         super.channelActive(ctx);
     }
 
     /**
      * 处理WebSocket连接关闭
-     * 
+     * <p>
      * 激活时机：
      * - 客户端主动关闭连接时
      * - 网络异常导致连接断开时
      * - 服务端主动关闭连接时（如心跳超时）
      * - 进程退出或服务器关闭时
-     * 
+     * <p>
      * 处理内容：
      * - 从连接管理器移除连接
      * - 取消所有相关的定时器（心跳、pong等待）
@@ -60,53 +60,58 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
      */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        String channelId = ctx.channel().id().asShortText();
-        connectionManager.removeConnection(channelId);
+        String channelId = generateChannelId(ctx);
+        if (channelId != null) {
+            connectionManager.removeConnection(channelId);
+        }
         super.channelInactive(ctx);
     }
 
     /**
      * 处理WebSocket消息
-     * 
+     * <p>
      * 激活时机：
      * - 客户端发送WebSocket文本消息时
      * - 包括心跳消息(ping/pong)和业务消息
      * - 每次收到消息都会触发
-     * 
+     * <p>
      * 处理内容：
      * - 解析文本帧内容
      * - 委托给消息处理器进行JSON解析和路由
      * - 自动重置心跳检测定时器
      * - 记录调试日志
-     * 
+     * <p>
      * 注意：只处理TextWebSocketFrame，忽略二进制帧
      */
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, WebSocketFrame frame) throws Exception {
         if (frame instanceof TextWebSocketFrame) {
             String rawMessage = ((TextWebSocketFrame) frame).text();
-            String channelId = ctx.channel().id().asShortText();
-            
-            logger.debug("收到WebSocket消息，连接：{}，内容：{}", channelId, rawMessage);
-            
-            // 统一使用消息处理器处理标准JSON格式消息
-            messageProcessor.processMessage(channelId, rawMessage);
+            String channelId = generateChannelId(ctx);
+            if (channelId != null) {
+                logger.debug("收到WebSocket消息，连接：{}，内容：{}", channelId, rawMessage);
+
+                // 统一使用消息处理器处理标准JSON格式消息
+                messageProcessor.processMessage(channelId, rawMessage);
+            } else {
+                logger.warn("收到消息但连接未注册，忽略消息");
+            }
         }
     }
 
     /**
      * 处理用户事件，如心跳检测、连接超时等
-     * 
+     * <p>
      * 激活时机：
      * - IdleStateHandler检测到读超时时（75秒无消息）
      * - IdleStateHandler检测到写超时时（我们禁用了）
      * - 其他Netty内部事件触发时
-     * 
+     * <p>
      * 处理内容：
      * - READER_IDLE：触发服务端主动心跳检测
      * - 委托给连接管理器处理具体的ping/pong逻辑
      * - 记录心跳检测事件
-     * 
+     * <p>
      * 工作流程：
      * 1. 75秒内没收到客户端消息
      * 2. IdleStateHandler触发READER_IDLE事件
@@ -116,9 +121,9 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent idleStateEvent) {
-            String channelId = ctx.channel().id().asShortText();
-            
-            if (idleStateEvent.state() == IdleState.READER_IDLE) {
+            String channelId = generateChannelId(ctx);
+
+            if (channelId != null && idleStateEvent.state() == IdleState.READER_IDLE) {
                 // 75秒没收到客户端消息，开始ping检测
                 connectionManager.handleReaderIdle(channelId);
             }
@@ -128,24 +133,52 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
 
     /**
      * 处理异常情况
-     * 
+     * <p>
      * 激活时机：
      * - WebSocket连接过程中发生任何异常时
      * - JSON解析错误、网络IO异常等
      * - 消息处理过程中的未捕获异常
      * - Netty pipeline中的异常向上传播
-     * 
+     * <p>
      * 处理内容：
      * - 记录详细的错误日志
      * - 主动关闭异常连接
      * - 触发channelInactive进行资源清理
-     * 
+     * <p>
      * 注意：关闭连接会自动触发连接管理器的清理逻辑
      */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        String channelId = ctx.channel().id().asShortText();
-        logger.error("WebSocket连接异常，连接：{}，错误：", channelId, cause);
+        String channelId = generateChannelId(ctx);
+        if (channelId != null) {
+            logger.error("WebSocket连接异常，连接：{}，错误：", channelId, cause);
+        } else {
+            logger.error("WebSocket连接异常（未注册），错误：", cause);
+        }
         ctx.close();
+    }
+
+    /**
+     * 生成channelId
+     * 使用userId_deviceId格式，这样consumer就可以直接使用相同的格式
+     */
+    private String generateChannelId(ChannelHandlerContext ctx) {
+        try {
+            Long userId = WebSocketAuthHandler.getUserId(ctx);
+            String deviceId = WebSocketAuthHandler.getDeviceId(ctx);
+
+            if (userId != null && deviceId != null) {
+                return String.format("user_%d_device_%s", userId, deviceId);
+            } else {
+                // 如果还没有用户信息（比如连接刚建立但还没认证），使用Netty的channel id
+                // 这种情况应该很少见，因为channelActive通常在认证之后
+                logger.warn("无法获取用户信息，使用Netty channel id: {}", ctx.channel().id().asShortText());
+                return ctx.channel().id().asShortText();
+            }
+        } catch (Exception e) {
+            // 异常情况下使用Netty的channel id作为fallback
+            logger.error("生成channelId失败，使用Netty channel id", e);
+            return ctx.channel().id().asShortText();
+        }
     }
 }

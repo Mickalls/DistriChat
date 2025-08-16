@@ -1,7 +1,7 @@
-package com.distri.chat.infrastructure.messaging;
+package com.distri.chat.infra.messaging;
 
-import com.distri.chat.infrastructure.websocket.WebSocketConnectionManager;
-import com.distri.chat.infrastructure.websocket.WebSocketConnectionRegistry;
+import com.distri.chat.infra.websocket.WebSocketConnectionManager;
+import com.distri.chat.infra.websocket.WebSocketConnectionRegistry;
 import com.distri.chat.shared.dto.WebSocketMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -23,41 +23,45 @@ public class WebSocketMessageConsumer {
     private final ObjectMapper objectMapper;
 
     public WebSocketMessageConsumer(WebSocketConnectionManager connectionManager,
-                                  WebSocketConnectionRegistry connectionRegistry,
-                                  ObjectMapper objectMapper) {
+                                    WebSocketConnectionRegistry connectionRegistry,
+                                    ObjectMapper objectMapper) {
         this.connectionManager = connectionManager;
         this.connectionRegistry = connectionRegistry;
         this.objectMapper = objectMapper;
     }
 
+    // 添加Bean方法获取当前实例应该监听的Topic
+    public String getCurrentTopic() {
+        return "ws-push-" + connectionRegistry.getServerId();
+    }
+
     /**
      * 消费WebSocket推送消息
      * Topic名称基于serverId动态生成：ws-push-{serverId}
-     * 
+     *
      * @param message JSON格式的推送消息
      */
     @KafkaListener(
-        topics = "#{@webSocketConnectionRegistry.serverId}",  // 动态Topic名称
-        topicPattern = "ws-push-.*",                          // Topic模式匹配
-        groupId = "#{@webSocketConnectionRegistry.serverId}-group"
+            topics = "#{'ws-push-' + @webSocketConnectionRegistry.serverId}",  // 正确的SpEL字符串拼接语法
+            groupId = "#{@webSocketConnectionRegistry.serverId}-group"
     )
     public void consumeWebSocketMessage(String message) {
         try {
             logger.debug("收到WebSocket推送消息: {}", message);
-            
+
             // 解析推送消息
             WebSocketPushMessage pushMessage = objectMapper.readValue(message, WebSocketPushMessage.class);
-            
+
             // 验证消息是否发给当前服务器
             if (!connectionRegistry.getServerId().equals(pushMessage.getTargetServerId())) {
-                logger.warn("收到非本服务器的推送消息: targetServerId={}, currentServerId={}", 
+                logger.warn("收到非本服务器的推送消息: targetServerId={}, currentServerId={}",
                         pushMessage.getTargetServerId(), connectionRegistry.getServerId());
                 return;
             }
-            
+
             // 处理推送消息
             processPushMessage(pushMessage);
-            
+
         } catch (Exception e) {
             logger.error("处理WebSocket推送消息失败: message={}", message, e);
         }
@@ -97,13 +101,13 @@ public class WebSocketMessageConsumer {
         Long userId = pushMessage.getUserId();
         String deviceId = pushMessage.getDeviceId();
         WebSocketMessage wsMessage = pushMessage.getWebSocketMessage();
-        
+
         // 构造channelId（需要与本地连接管理器的命名规则一致）
         String channelId = generateChannelId(userId, deviceId);
-        
+
         // 发送消息
         boolean sent = connectionManager.sendMessage(channelId, wsMessage);
-        
+
         logger.info("推送消息到用户设备: userId={}, deviceId={}, sent={}", userId, deviceId, sent);
     }
 
@@ -113,11 +117,11 @@ public class WebSocketMessageConsumer {
     private void pushToUserAllDevices(WebSocketPushMessage pushMessage) {
         Long userId = pushMessage.getUserId();
         WebSocketMessage wsMessage = pushMessage.getWebSocketMessage();
-        
+
         // 获取用户在当前服务器上的所有设备
         String currentServerId = connectionRegistry.getServerId();
         var devicesOnServer = connectionRegistry.getUserDevicesOnServer(userId, currentServerId);
-        
+
         int sentCount = 0;
         for (String deviceId : devicesOnServer) {
             String channelId = generateChannelId(userId, deviceId);
@@ -125,8 +129,8 @@ public class WebSocketMessageConsumer {
                 sentCount++;
             }
         }
-        
-        logger.info("推送消息到用户所有设备: userId={}, totalDevices={}, sentCount={}", 
+
+        logger.info("推送消息到用户所有设备: userId={}, totalDevices={}, sentCount={}",
                 userId, devicesOnServer.size(), sentCount);
     }
 
@@ -135,9 +139,9 @@ public class WebSocketMessageConsumer {
      */
     private void broadcastMessage(WebSocketPushMessage pushMessage) {
         WebSocketMessage wsMessage = pushMessage.getWebSocketMessage();
-        
+
         connectionManager.broadcast(wsMessage);
-        
+
         logger.info("广播消息: eventType={}", wsMessage.getEventType());
     }
 
@@ -162,28 +166,46 @@ public class WebSocketMessageConsumer {
         private String deviceId;
         private WebSocketMessage webSocketMessage;
 
-        // 推送类型枚举
-        public enum PushType {
-            SINGLE_USER_DEVICE,    // 推送给指定用户的指定设备
-            SINGLE_USER_ALL_DEVICES, // 推送给指定用户的所有设备
-            BROADCAST              // 广播给所有连接
+        // Getters and Setters
+        public PushType getType() {
+            return type;
         }
 
-        // Getters and Setters
-        public PushType getType() { return type; }
-        public void setType(PushType type) { this.type = type; }
+        public void setType(PushType type) {
+            this.type = type;
+        }
 
-        public String getTargetServerId() { return targetServerId; }
-        public void setTargetServerId(String targetServerId) { this.targetServerId = targetServerId; }
+        public String getTargetServerId() {
+            return targetServerId;
+        }
 
-        public Long getUserId() { return userId; }
-        public void setUserId(Long userId) { this.userId = userId; }
+        public void setTargetServerId(String targetServerId) {
+            this.targetServerId = targetServerId;
+        }
 
-        public String getDeviceId() { return deviceId; }
-        public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
+        public Long getUserId() {
+            return userId;
+        }
 
-        public WebSocketMessage getWebSocketMessage() { return webSocketMessage; }
-        public void setWebSocketMessage(WebSocketMessage webSocketMessage) { this.webSocketMessage = webSocketMessage; }
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+
+        public String getDeviceId() {
+            return deviceId;
+        }
+
+        public void setDeviceId(String deviceId) {
+            this.deviceId = deviceId;
+        }
+
+        public WebSocketMessage getWebSocketMessage() {
+            return webSocketMessage;
+        }
+
+        public void setWebSocketMessage(WebSocketMessage webSocketMessage) {
+            this.webSocketMessage = webSocketMessage;
+        }
 
         @Override
         public String toString() {
@@ -194,6 +216,13 @@ public class WebSocketMessageConsumer {
                     ", deviceId='" + deviceId + '\'' +
                     ", webSocketMessage=" + webSocketMessage +
                     '}';
+        }
+
+        // 推送类型枚举
+        public enum PushType {
+            SINGLE_USER_DEVICE,    // 推送给指定用户的指定设备
+            SINGLE_USER_ALL_DEVICES, // 推送给指定用户的所有设备
+            BROADCAST              // 广播给所有连接
         }
     }
 }

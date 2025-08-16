@@ -1,4 +1,4 @@
-package com.distri.chat.infrastructure.interceptor;
+package com.distri.chat.infra.interceptor;
 
 import com.distri.chat.shared.context.UserContext;
 import com.distri.chat.shared.dto.Result;
